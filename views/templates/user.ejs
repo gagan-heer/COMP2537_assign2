@@ -1,1 +1,13 @@
-<li> <%= user.username %> </li>
+<li class="d-flex align-items-center mb-3"> <span class="me-3"><%= user.name%> (<%= user.user_type %>)</span>
+    <% if (user.user_type === 'user') { %>
+    <form action='/promoteUser' method='post'>
+        <input type="hidden" name="userId" value="<%= user._id %>">
+        <button type="submit" class="btn btn-danger rounded-pill px-3 d-inline-block" style="margin-right: 10px;" type="button">Promote to Admin</button>
+      </form>
+      <% } else if (user.user_type === 'admin') { %>
+      <form action='/demoteUser' method='post'>
+        <input type="hidden" name="userId" value="<%= user._id %>">
+        <button type="submit" class="btn btn-success rounded-pill px-3 d-inline-block" style="margin-right: 10px;" type="button">Demote to User</button>
+    </form>
+    <% } %>
+</li>

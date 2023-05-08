@@ -14,6 +14,7 @@ const app = express();
 
 const Joi = require("joi");
 
+const {ObjectId} = require('mongodb');
 
 const expireTime = 24 * 60 * 60 * 1000; //expires after 1 day  (hours * minutes * seconds * millis)
 
@@ -77,7 +78,7 @@ function isAdmin(req) {
 function adminAuthorization(req, res, next) {
     if (!isAdmin(req)) {
         res.status(403);
-        res.render("errorMessage", {error: "Not Authorized"});
+        res.render("errorMessage", {error: "Forbidden - 403"});
         return;
     }
     else {
@@ -86,7 +87,7 @@ function adminAuthorization(req, res, next) {
 }
 
 app.get('/', (req,res) => {
-    res.render("index");
+    res.render('index', { name: req.session.name });
 });
 
 app.get('/nosql-injection', async (req,res) => {
@@ -119,130 +120,140 @@ app.get('/nosql-injection', async (req,res) => {
     res.send(`<h1>Hello ${username}</h1>`);
 });
 
-app.get('/about', (req,res) => {
-    var color = req.query.color;
-
-    res.render("about", {color: color});
+app.get('/signup', (req,res) => {
+    res.render("signup");
 });
-
-app.get('/contact', (req,res) => {
-    var missingEmail = req.query.missing;
-
-    res.render("contact", {missing: missingEmail});
-});
-
-app.post('/submitEmail', (req,res) => {
-    var email = req.body.email;
-    if (!email) {
-        res.redirect('/contact?missing=1');
-    }
-    else {
-        res.render("submitEmail", {email: email});
-    }
-});
-
-
-app.get('/createUser', (req,res) => {
-    res.render("createUser");
-});
-
 
 app.get('/login', (req,res) => {
     res.render("login");
 });
 
-app.post('/submitUser', async (req,res) => {
-    var username = req.body.username;
-    var password = req.body.password;
-
-	const schema = Joi.object(
-		{
-			username: Joi.string().alphanum().max(20).required(),
-			password: Joi.string().max(20).required()
-		});
-	
-	const validationResult = schema.validate({username, password});
+app.post('/submitUser', async (req, res) => {
+	var name = req.body.name;
+	var password = req.body.password;
+	var email = req.body.email;
+  
+	if (!name || !email || !password) {
+	  var errorMessage = '';
+	  if (!name) {
+		errorMessage += 'Please provide a name.';
+	  }
+	  if (!email) {
+		errorMessage += 'Please provide an email address.';
+	  }
+	  if (!password) {
+		errorMessage += 'Please provide a password.';
+	  }
+	  res.render('submitUser', { errorMessage });
+	  return;
+	}
+  
+	const schema = Joi.object({
+	  name: Joi.string().alphanum().max(20).required(),
+	  email: Joi.string().email().required(),
+	  password: Joi.string().max(20).required()
+	});
+  
+	const validationResult = schema.validate({ name, email, password });
 	if (validationResult.error != null) {
-	   console.log(validationResult.error);
-	   res.redirect("/createUser");
-	   return;
-   }
-
-    var hashedPassword = await bcrypt.hash(password, saltRounds);
-	
-	await userCollection.insertOne({username: username, password: hashedPassword, user_type: "user"});
+	  console.log(validationResult.error);
+	  res.redirect("/signup");
+	  return;
+	}
+  
+	var hashedPassword = await bcrypt.hash(password, saltRounds);
+  
+	await userCollection.insertOne({ name: name, email: email, password: hashedPassword, user_type: "user"});
 	console.log("Inserted user");
+  
+	req.session.authenticated = true;
+	req.session.name = name;
+	req.session.cookie.maxAge = expireTime;
+	res.redirect('/members');
+  });  
 
-    var html = "successfully created user";
-    res.render("submitUser", {html: html});
-});
-
-app.post('/loggingin', async (req,res) => {
-    var username = req.body.username;
+  app.post('/loggingin', async (req, res) => {
+    var email = req.body.email;
     var password = req.body.password;
 
-	const schema = Joi.string().max(20).required();
-	const validationResult = schema.validate(username);
-	if (validationResult.error != null) {
-	   console.log(validationResult.error);
-	   res.redirect("/login");
-	   return;
-	}
+    const schema = Joi.object({
+        email: Joi.string().email().required(),
+        password: Joi.string().max(20).required()
+    });
+    const validationResult = schema.validate({ email, password });
+    if (validationResult.error != null) {
+        console.log(validationResult.error);
+        res.redirect("/login");
+        return;
+    }
 
-	const result = await userCollection.find({username: username}).project({username: 1, password: 1, user_type: 1, _id: 1}).toArray();
+    const result = await userCollection.find({ email: email }).project({ name: 1, password: 1, user_type: 1, _id: 1 }).toArray();
 
-	console.log(result);
-	if (result.length != 1) {
-		console.log("user not found");
-		res.redirect("/login");
-		return;
-	}
-	if (await bcrypt.compare(password, result[0].password)) {
-		console.log("correct password");
-		req.session.authenticated = true;
-		req.session.username = username;
+    console.log(result);
+    if (result.length != 1) {
+        console.log("user not found");
+        var errorMessage = "User not found.";
+        res.render('loggingin', { errorMessage });
+        return;
+    }
+    if (await bcrypt.compare(password, result[0].password)) {
+        console.log("correct password");
+        req.session.authenticated = true;
+        req.session.name = result[0].name;
         req.session.user_type = result[0].user_type;
-		req.session.cookie.maxAge = expireTime;
+        req.session.cookie.maxAge = expireTime;
 
-		res.redirect('/loggedIn');
-		return;
-	}
-	else {
-		console.log("incorrect password");
-		res.redirect("/login");
-		return;
-	}
+        res.redirect('/loggedIn');
+        return;
+    }
+    else {
+        console.log("incorrect password");
+        var errorMessage = "Invalid email/password combination.";
+        res.render('loggingin', { errorMessage });
+        return;
+    }
 });
 
 app.use('/loggedin', sessionValidation);
 app.get('/loggedin', (req,res) => {
     if (!req.session.authenticated) {
         res.redirect('/login');
+    } else {
+        res.redirect('/members');
     }
-    res.render("loggedin");
 });
 
-app.get('/loggedin/info', (req,res) => {
-    res.render("loggedin-info");
-});
 
-app.get('/logout', (req,res) => {
+app.get('/members', (req, res) => {
+	if (!req.session.authenticated) {
+	  res.redirect('/');
+	} else {
+	  var name = req.session.name;
+	  res.render("members", {name});
+	}
+  });
+
+  app.get('/logout', (req,res) => {
 	req.session.destroy();
-    res.render("loggedout");
+    res.redirect("/");
 });
-
-
-app.get('/cat/:id', (req,res) => {
-    var cat = req.params.id;
-
-    res.render("cat", {cat: cat});
-});
-
 
 app.get('/admin', sessionValidation, adminAuthorization, async (req,res) => {
-    const result = await userCollection.find().project({username: 1, _id: 1}).toArray();
+    const result = await userCollection.find().project({name: 1, _id: 1, user_type: 1}).toArray();
  
     res.render("admin", {users: result});
+});
+
+app.post('/promoteUser', async (req,res) => {
+    const userId = req.body.userId;
+    await userCollection.updateOne({ _id: ObjectId(userId) }, { $set: { user_type: 'admin' } });
+    res.redirect('/admin');
+});
+
+app.post('/demoteUser', async (req,res) => {
+    const userId = req.body.userId;
+    await userCollection.updateOne({ _id: ObjectId(userId) }, { $set: { user_type: 'user' } });
+    res.redirect('/admin');
 });
 
 app.use(express.static(__dirname + "/public"));

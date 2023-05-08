@@ -1,3 +1,28 @@
 <%- include("templates/header") %> 
-    <h1>Hello World!</h1>
+  <% if (typeof name === 'undefined') { %>
+    <div class="d-flex gap-2 justify-content-center py-5">
+      <form action='/signup' method='get'>
+        <button type="submit" class="btn btn-primary rounded-pill px-3" type="button">Sign Up</button>
+      </form>
+      <form action='/login' method='get'>
+        <button type="submit" class="btn btn-primary rounded-pill px-3" type="button">Log In</button>
+      </form>
+    </div>
+  <% } else { %>
+    <h3 class="display-6 fw-normal"><p>Hello, <%= name %>!</p></h3>
+    <div class="d-flex gap-2 justify-content-center py-5">
+      <form action='/members' method='get'>
+        <button type="submit" class="btn btn-primary rounded-pill px-3" type="button">Member's Area</button>
+      </form>
+      <form action='/logout' method='get'>
+        <button type="submit" class="btn btn-secondary rounded-pill px-3" type="button">Log Out</button>
+      </form>
+      <form action='/admin' method='get'>
+        <button type="submit" class="btn btn-dark rounded-pill px-3" type="button">Admin</button>
+      </form>
+      <form action='/dne' method='get'>
+        <button type="submit" class="btn btn-danger rounded-pill px-3" type="button">404</button>
+      </form>
+    </div>
+  <% } %>
 <%- include("templates/footer") %> 
